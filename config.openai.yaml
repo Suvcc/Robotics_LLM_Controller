@@ -1,0 +1,16 @@
+# OpenAI preset for pipeline testing without a local model.
+# The API key is NOT stored here — set it in your shell first:
+#   $env:OPENAI_API_KEY = "sk-..."
+# Run with:  python -m aliengo.cli --config config.openai.yaml
+llm:
+  model: gpt-5.4-nano
+  base_url: https://api.openai.com/v1
+  temperature: 0.1
+  max_iterations: 10
+
+safety:
+  max_cumulative_distance_m: 6.0
+  max_tool_calls_per_command: 8
+
+logging:
+  actions_path: logs/actions.jsonl
