@@ -13,10 +13,16 @@ dependencies = [
     "python-dotenv>=1.0",
     "rich>=13.7",
     "pyyaml>=6.0",
+    "faster-whisper>=1.2.1",
+    "sounddevice>=0.5.5",
+    "numpy>=2.4.6",
+    "scipy>=1.17.1",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# uv installs the dev group by default on sync/run, so pytest and the
+# notebook kernel stop getting uninstalled by plain `uv sync`.
+[dependency-groups]
+dev = ["pytest>=8.0", "ipykernel>=6.29"]
 
 [project.scripts]
 aliengo = "aliengo.cli:main"

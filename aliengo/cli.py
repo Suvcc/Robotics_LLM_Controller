@@ -29,6 +29,7 @@ FALLBACK_SYSTEM_PROMPT = (
 
 HELP = """\
 Commands: anything in plain English, or:
+  /voice   speak a command instead of typing
   /state   show robot state
   /log [n] show last n log entries (default 5)
   /estop   toggle the emergency stop
@@ -129,7 +130,22 @@ def main() -> None:
         if not text:
             continue
 
-        if text.startswith("/"):
+        if text == "/voice":
+            from .speech import stt  # lazy: speech deps load on first use only
+            try:
+                text = stt.listen()
+            except NotImplementedError:
+                console.print(
+                    "[yellow]STT not implemented yet — add your logic in "
+                    "aliengo/speech/stt.py[/]"
+                )
+                continue
+            console.print(f"[dim]heard:[/] {text!r}")
+            if not text or not Confirm.ask("Run this command?", default=True):
+                continue
+            # text now flows into the normal pipeline below, same as typed input
+
+        elif text.startswith("/"):
             cmd, _, arg = text.partition(" ")
             if cmd == "/quit":
                 break
