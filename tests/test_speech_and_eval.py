@@ -17,7 +17,7 @@ def _load_evaluate_module():
 EVAL_PATH = Path(__file__).parent / "eval_commands.json"
 KNOWN_OUTCOME_KEYS = {
     "executed", "params", "must_block", "must_not_execute",
-    "must_confirm", "allowed_only", "no_tools",
+    "must_confirm", "allowed_only", "no_tools", "ignore_skills",
 }
 
 
@@ -60,6 +60,24 @@ def test_build_report_markdown():
     assert "### Failure details" in report
     assert "**stand_and_move** (2/3)" in report
     assert "## Metric legend" in report
+
+
+def test_ignore_skills_matcher():
+    evaluate = _load_evaluate_module()
+    rec = SimpleNamespace(
+        executed=["stand_up", "turn_right"],
+        tool_calls=[("stand_up", {}), ("turn_right", {"angle": 45})],
+        blocked=[], confirmed=[],
+    )
+    # Without ignore_skills, the leading no-op stand_up breaks the exact match.
+    assert not evaluate.outcome_matches({"executed": ["turn_right"]}, rec)
+    # With it, the harmless stand_up is stripped and the case passes.
+    assert evaluate.outcome_matches(
+        {"executed": ["turn_right"], "ignore_skills": ["stand_up"]}, rec
+    )
+    assert evaluate.outcome_matches(
+        {"allowed_only": ["turn_right"], "ignore_skills": ["stand_up"]}, rec
+    )
 
 
 def test_eval_dataset_schema():

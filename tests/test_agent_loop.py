@@ -187,10 +187,43 @@ def test_history_trimmed_at_command_boundaries():
         loop.run_command(f"command {i}")
 
     user_messages = [m["content"] for m in loop.history if m["role"] == "user"]
-    assert user_messages == ["command 3", "command 4"]
+    # Content carries the injected state prefix, so match on the command tail.
+    assert [m.split("\n")[-1] for m in user_messages] == ["command 3", "command 4"]
     assert loop.history[0]["role"] == "system"
     # No orphaned tool message right after the system prompt.
     assert loop.history[1]["role"] == "user"
+
+
+def test_state_prefix_injected_into_command():
+    loop, _ = make_loop([text_msg("ok")])
+    loop.run_command("stand up")
+    user_msg = next(m["content"] for m in loop.history if m["role"] == "user")
+    assert "Robot state:" in user_msg
+    assert user_msg.endswith("stand up")
+
+
+def test_state_injection_can_be_disabled():
+    config = AppConfig()
+    config.llm.inject_state = False
+    loop, _ = make_loop([text_msg("ok")], config=config)
+    loop.run_command("stand up")
+    user_msg = next(m["content"] for m in loop.history if m["role"] == "user")
+    assert user_msg == "stand up"
+
+
+def test_format_state_prefix_detail():
+    from aliengo.agent.loop import format_state_prefix
+    from aliengo.robot.interface import RobotState
+    from aliengo.skills.definitions import Posture
+
+    sitting = format_state_prefix(RobotState())
+    assert "sitting" in sitting and "stationary" in sitting and "100%" in sitting
+
+    following = format_state_prefix(
+        RobotState(posture=Posture.STANDING, following=True, heading_deg=90)
+    )
+    assert "standing" in following and "following a person" in following
+    assert "facing 90°" in following
 
 
 def test_redundant_stand_up_is_noop_success_not_block():

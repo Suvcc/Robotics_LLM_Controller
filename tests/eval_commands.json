@@ -34,7 +34,7 @@
     "command": "Turn right 45 degrees.",
     "setup": {"standing": true},
     "any_of": [
-      {"executed": ["turn_right"], "params": {"turn_right": {"angle": 45}}}
+      {"executed": ["turn_right"], "params": {"turn_right": {"angle": 45}}, "ignore_skills": ["stand_up"]}
     ]
   },
   {
@@ -43,7 +43,7 @@
     "setup": {"standing": true},
     "any_of": [
       {"no_tools": true},
-      {"allowed_only": ["turn_left", "turn_right"]}
+      {"allowed_only": ["turn_left", "turn_right"], "ignore_skills": ["stand_up"]}
     ]
   },
   {

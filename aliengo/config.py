@@ -12,6 +12,9 @@ class LLMConfig(BaseModel):
     # How many past user commands (with their tool exchanges) to keep in the
     # conversation; older ones are dropped so latency doesn't creep up.
     max_history_commands: int = Field(default=8, ge=1)
+    # Prepend a one-line robot-state summary to each command so the model can
+    # "see" posture/battery/motion instead of guessing (e.g. defensive stand_up).
+    inject_state: bool = True
 
 
 class SafetyConfig(BaseModel):

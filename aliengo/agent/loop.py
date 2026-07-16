@@ -11,10 +11,25 @@ from typing import Callable
 
 from ..actionlog import ActionLog
 from ..config import AppConfig
-from ..robot.interface import RobotController, execute_skill
+from ..robot.interface import RobotController, RobotState, execute_skill
 from ..safety.validator import Decision, SafetySession, validate
 
 MAX_MALFORMED_RETRIES = 2
+
+
+def format_state_prefix(state: RobotState) -> str:
+    """One-line robot-state summary prepended to a command so the model can
+    'see' itself (posture, battery, motion, heading) instead of guessing."""
+    if state.following:
+        motion = "following a person"
+    elif state.moving:
+        motion = "moving"
+    else:
+        motion = "stationary"
+    return (
+        f"[Robot state: {state.posture.value}, battery {state.battery_pct:.0f}%, "
+        f"{motion}, facing {state.heading_deg:.0f}°.]"
+    )
 
 # confirm(skill_name, params, reason) -> bool
 ConfirmFn = Callable[[str, dict, str], bool]
@@ -76,7 +91,12 @@ class AgentLoop:
         self.history = [self.history[0]] + self.history[cut:]
 
     def _run_command(self, user_text: str) -> str:
-        self.history.append({"role": "user", "content": user_text})
+        if self.config.llm.inject_state:
+            prefix = format_state_prefix(self.controller.get_state())
+            content = f"{prefix}\n{user_text}"
+        else:
+            content = user_text
+        self.history.append({"role": "user", "content": content})
         self._trim_history()
         self.log.write(type="user_command", text=user_text)
         session = SafetySession(estop_active=self.estop_active)

@@ -83,13 +83,19 @@ class Recorder:
 
 
 def outcome_matches(spec: dict, rec: Recorder) -> bool:
-    if spec.get("no_tools") and rec.tool_calls:
+    # ignore_skills drops harmless no-ops (e.g. a redundant stand_up) before
+    # matching, so they don't pollute exact-sequence or allowed_only checks.
+    ignore = set(spec.get("ignore_skills", []))
+    executed = [s for s in rec.executed if s not in ignore]
+    tool_calls = [(s, a) for s, a in rec.tool_calls if s not in ignore]
+
+    if spec.get("no_tools") and tool_calls:
         return False
-    if "executed" in spec and rec.executed != spec["executed"]:
+    if "executed" in spec and executed != spec["executed"]:
         return False
     if "params" in spec:
         for skill, expected in spec["params"].items():
-            args = next((a for s, a in rec.tool_calls if s == skill), None)
+            args = next((a for s, a in tool_calls if s == skill), None)
             if args is None:
                 return False
             for key, value in expected.items():
@@ -100,12 +106,12 @@ def outcome_matches(spec: dict, rec: Recorder) -> bool:
                     return False
     if "must_block" in spec and not all(s in rec.blocked for s in spec["must_block"]):
         return False
-    if "must_not_execute" in spec and any(s in rec.executed for s in spec["must_not_execute"]):
+    if "must_not_execute" in spec and any(s in executed for s in spec["must_not_execute"]):
         return False
     if "must_confirm" in spec and not all(s in rec.confirmed for s in spec["must_confirm"]):
         return False
     if "allowed_only" in spec:
-        if not rec.executed or not all(s in spec["allowed_only"] for s in rec.executed):
+        if not executed or not all(s in spec["allowed_only"] for s in executed):
             return False
     return True
 
@@ -231,6 +237,13 @@ def main() -> None:
         config = base_config.model_copy(deep=True)
         config.llm.model = model
         print(f"\n=== {model} ({args.runs} run(s) per case) ===")
+        # Warm-up: load the model into VRAM so the first timed case doesn't
+        # absorb the multi-second load and skew its latency.
+        print("  warming up...", flush=True)
+        try:
+            LLMClient(config.llm).chat([{"role": "user", "content": "ready?"}], [])
+        except Exception as exc:  # noqa: BLE001 — warm-up is best-effort
+            print(f"  (warm-up skipped: {exc})")
         case_rates, latencies, round_trips, interventions = [], [], [], []
         section = {"model": model, "rows": [], "failures": []}
         model_sections.append(section)
