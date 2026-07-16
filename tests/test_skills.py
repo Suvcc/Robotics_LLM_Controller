@@ -11,11 +11,12 @@ from aliengo.skills.registry import get_skill, to_openai_tools
 
 EXPECTED_SKILLS = {
     "stand_up", "sit_down", "move_forward", "move_backward",
-    "turn_left", "turn_right", "stop", "find_object", "follow_person",
+    "turn_left", "turn_right", "stop", "find_object", "detect_objects",
+    "follow_person",
 }
 
 
-def test_all_nine_skills_registered():
+def test_all_skills_registered():
     assert {s.name for s in ALL_SKILLS} == EXPECTED_SKILLS
 
 

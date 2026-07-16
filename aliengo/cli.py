@@ -133,7 +133,7 @@ def main() -> None:
         if text == "/voice":
             from .speech import stt  # lazy: speech deps load on first use only
             try:
-                text = stt.listen()
+                text = stt.listen(config.speech)
             except NotImplementedError:
                 console.print(
                     "[yellow]STT not implemented yet — add your logic in "
@@ -160,7 +160,7 @@ def main() -> None:
                 state = "ACTIVE" if loop.estop_active else "released"
                 console.print(f"[bold red]emergency stop {state}[/]")
             elif cmd == "/reset":
-                controller.__init__(log=log)
+                controller.reset()
                 loop.reset_conversation()
                 loop.estop_active = False
                 console.print("[dim]robot and conversation reset[/]")

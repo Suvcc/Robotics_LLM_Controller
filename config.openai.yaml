@@ -12,5 +12,10 @@ safety:
   max_cumulative_distance_m: 6.0
   max_tool_calls_per_command: 8
 
+speech:
+  model_size: base
+  duration_s: 5
+  language: en
+
 logging:
   actions_path: logs/actions.jsonl

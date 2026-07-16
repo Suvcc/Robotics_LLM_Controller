@@ -1,8 +1,9 @@
 llm:
-  model: qwen3:8b
+  model: qwen3.5:9b
   base_url: http://localhost:11434/v1
   temperature: 0.1
   max_iterations: 10
+  max_history_commands: 8
 
 safety:
   max_cumulative_distance_m: 6.0
@@ -10,3 +11,8 @@ safety:
 
 logging:
   actions_path: logs/actions.jsonl
+
+speech:
+  model_size: base   # try "small" if transcriptions are poor
+  duration_s: 5
+  language: en       # remove to let Whisper auto-detect

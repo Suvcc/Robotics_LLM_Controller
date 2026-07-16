@@ -100,6 +100,26 @@ def test_find_object(robot):
     assert missing.data["found"] is False
 
 
+def test_detect_objects(robot):
+    result = robot.detect_objects()
+    assert result.success
+    labels = [o["label"] for o in result.data["objects"]]
+    assert "bottle" in labels and "person" in labels
+
+
+def test_reset(standing):
+    standing.move_forward(distance=2.0)
+    standing.inject_failure("stop", "x")
+    standing.set_visible_objects([])
+    standing.reset()
+    state = standing.get_state()
+    assert state.posture is Posture.SITTING
+    assert (state.x, state.y) == (0.0, 0.0)
+    assert state.battery_pct == 100.0
+    assert standing.visible_objects  # defaults restored
+    assert standing.stop().success  # injected failure cleared
+
+
 def test_follow_person_and_stop(standing):
     result = standing.follow_person()
     assert result.success

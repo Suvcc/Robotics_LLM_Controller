@@ -174,6 +174,22 @@ def test_confirmation_accepted():
     assert controller.get_state().following is True
 
 
+def test_history_trimmed_at_command_boundaries():
+    config = AppConfig()
+    config.llm.max_history_commands = 2
+    loop, _ = make_loop(
+        [tool_msg(("stand_up", {})), text_msg("ok")] * 10, config=config
+    )
+    for i in range(5):
+        loop.run_command(f"command {i}")
+
+    user_messages = [m["content"] for m in loop.history if m["role"] == "user"]
+    assert user_messages == ["command 3", "command 4"]
+    assert loop.history[0]["role"] == "system"
+    # No orphaned tool message right after the system prompt.
+    assert loop.history[1]["role"] == "user"
+
+
 def test_redundant_stand_up_is_noop_success_not_block():
     # Regression for stale-plan carryover: a redundant stand_up mid-task must
     # come back as a success the LLM can continue past, never a block that

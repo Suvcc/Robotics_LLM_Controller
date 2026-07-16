@@ -6,6 +6,7 @@ decision; BLOCK reasons and skill errors are fed back to the LLM as tool
 results so it can recover.
 """
 import json
+import time
 from typing import Callable
 
 from ..actionlog import ActionLog
@@ -48,7 +49,31 @@ class AgentLoop:
         self.history = [{"role": "system", "content": system}]
 
     def run_command(self, user_text: str) -> str:
+        start = time.perf_counter()
+        try:
+            return self._run_command(user_text)
+        finally:
+            self.log.write(
+                type="command_complete",
+                seconds=round(time.perf_counter() - start, 2),
+            )
+
+    def _trim_history(self) -> None:
+        # Drop the oldest complete exchanges (trimming only at user-message
+        # boundaries keeps every tool message with its assistant tool_calls,
+        # which the OpenAI protocol requires).
+        max_commands = self.config.llm.max_history_commands
+        user_indices = [
+            i for i, m in enumerate(self.history) if m.get("role") == "user"
+        ]
+        if len(user_indices) <= max_commands:
+            return
+        cut = user_indices[len(user_indices) - max_commands]
+        self.history = [self.history[0]] + self.history[cut:]
+
+    def _run_command(self, user_text: str) -> str:
         self.history.append({"role": "user", "content": user_text})
+        self._trim_history()
         self.log.write(type="user_command", text=user_text)
         session = SafetySession(estop_active=self.estop_active)
         malformed_count = 0
