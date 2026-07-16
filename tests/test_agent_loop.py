@@ -84,6 +84,8 @@ def test_multi_step_command():
     state = controller.get_state()
     assert state.posture is Posture.STANDING
     assert state.x == pytest.approx(2.0)
+    assert loop.last_command_stats["llm_calls"] == 3
+    assert loop.last_command_stats["malformed_calls"] == 0
 
 
 def test_safety_block_is_fed_back_to_llm():
@@ -136,6 +138,7 @@ def test_malformed_arguments_abort_after_retries():
     ])
     reply = loop.run_command("go forward")
     assert "invalid tool calls" in reply
+    assert loop.last_command_stats["malformed_calls"] == 3
 
 
 def test_iteration_cap():
