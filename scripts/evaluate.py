@@ -8,6 +8,18 @@ Usage:
     python scripts/evaluate.py                          # model from config.yaml
     python scripts/evaluate.py --models qwen3.5:9b llama3.1:8b
     python scripts/evaluate.py --config config.openai.yaml
+    python scripts/evaluate.py --runs 3                 # consistency check
+
+Metrics reported per case:
+    n/N   pass rate across --runs (ok = all passed, FLKY = mixed, FAIL = none);
+          a flaky case is a coin flip, not a capability
+    s     median wall seconds for the command (all LLM round-trips + tools)
+    rt    median LLM round-trips needed to finish the command — directly
+          multiplies latency
+    iv    interventions across all runs: safety BLOCKs + malformed tool calls;
+          near-misses that the pass/fail verdict hides
+The overall score is the mean of per-case pass rates. Token usage is not shown
+here but is logged per command to logs/actions.jsonl (command_complete lines).
 
 Case format (tests/eval_commands.json): each case has a `command`, optional
 `setup` ({"standing": true, "estop": true}), optional `pre_commands` (run
@@ -27,6 +39,7 @@ import json
 import statistics
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -97,7 +110,7 @@ def outcome_matches(spec: dict, rec: Recorder) -> bool:
     return True
 
 
-def run_case(case: dict, config, system_prompt: str, tools: list[dict]) -> tuple[bool, str, float]:
+def run_case(case: dict, config, system_prompt: str, tools: list[dict]) -> dict:
     controller = MockRobotController()
     recorder = Recorder()
     approve = case.get("confirm", True)
@@ -129,7 +142,65 @@ def run_case(case: dict, config, system_prompt: str, tools: list[dict]) -> tuple
         f"executed={recorder.executed} blocked={recorder.blocked} "
         f"confirmed={recorder.confirmed} reply={reply[:60]!r}"
     )
-    return passed, detail, seconds
+    stats = loop.last_command_stats
+    return {
+        "passed": passed,
+        "detail": detail,
+        "seconds": seconds,
+        "round_trips": stats.get("llm_calls", 0),
+        "interventions": len(recorder.blocked) + stats.get("malformed_calls", 0),
+    }
+
+
+def build_report(meta: dict, summary_rows: list, model_sections: list) -> str:
+    """Assemble the Markdown report. Pure function — no I/O — so it's testable."""
+    lines = [
+        f"# AlienGo Eval Report — {meta['timestamp']}",
+        "",
+        f"**Config:** {meta['config']} · **Cases:** {meta['n_cases']} · "
+        f"**Runs per case:** {meta['runs']}",
+        "",
+        "## Summary",
+        "",
+        "| Model | Score | p50 latency | Avg round-trips | Interventions |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for model, score, p50, avg_rt, iv in summary_rows:
+        lines.append(
+            f"| {model} | {score:.0%} | {p50:.1f} s | {avg_rt:.1f} | {iv} |"
+        )
+    for section in model_sections:
+        lines += [
+            "",
+            f"## {section['model']}",
+            "",
+            "| | Case | Pass | Median | RT | IV |",
+            "|---|---|---:|---:|---:|---:|",
+        ]
+        for row in section["rows"]:
+            lines.append(
+                f"| {row['status']} | {row['id']} | {row['n_pass']}/{row['runs']} "
+                f"| {row['med_s']:.1f} s | {row['med_rt']:.0f} | {row['iv']} |"
+            )
+        if section["failures"]:
+            lines += ["", "### Failure details", ""]
+            for failure in section["failures"]:
+                lines.append(
+                    f"- **{failure['id']}** ({failure['n_pass']}/{failure['runs']}) "
+                    f"— first failing run: {failure['detail']}"
+                )
+    lines += [
+        "",
+        "## Metric legend",
+        "",
+        "- **Score** — mean of per-case pass rates (a 2/3 case counts as 0.67).",
+        "- **Pass** — runs passed / total runs; a mixed result means the case is flaky.",
+        "- **Median** — median wall seconds per command (all LLM round-trips + tool execution).",
+        "- **RT** — median LLM round-trips needed to complete the command.",
+        "- **IV** — interventions: safety blocks + malformed tool calls across all runs.",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def main() -> None:
@@ -137,7 +208,16 @@ def main() -> None:
     parser.add_argument("--config", default=str(ROOT / "config.yaml"))
     parser.add_argument("--models", nargs="*", help="Override config model(s)")
     parser.add_argument("--cases", default=str(ROOT / "tests" / "eval_commands.json"))
+    parser.add_argument(
+        "--runs", type=int, default=1,
+        help="Times to run each case; >1 exposes flaky (inconsistent) cases",
+    )
+    parser.add_argument(
+        "--out", default=None,
+        help="Markdown report path (default: logs/eval_<timestamp>.md)",
+    )
     args = parser.parse_args()
+    started = datetime.now()
 
     base_config = load_config(args.config)
     cases = json.loads(Path(args.cases).read_text(encoding="utf-8"))
@@ -146,23 +226,75 @@ def main() -> None:
     models = args.models or [base_config.llm.model]
 
     summary = []
+    model_sections = []
     for model in models:
         config = base_config.model_copy(deep=True)
         config.llm.model = model
-        print(f"\n=== {model} ===")
-        passes, latencies = 0, []
+        print(f"\n=== {model} ({args.runs} run(s) per case) ===")
+        case_rates, latencies, round_trips, interventions = [], [], [], []
+        section = {"model": model, "rows": [], "failures": []}
+        model_sections.append(section)
         for case in cases:
-            passed, detail, seconds = run_case(case, config, system_prompt, tools)
-            latencies.append(seconds)
-            passes += passed
-            status = "ok " if passed else "FAIL"
-            print(f"  [{status}] {case['id']:32} {seconds:5.1f}s  {detail}")
-        summary.append((model, passes / len(cases), statistics.median(latencies)))
+            runs = [
+                run_case(case, config, system_prompt, tools)
+                for _ in range(args.runs)
+            ]
+            n_pass = sum(r["passed"] for r in runs)
+            if n_pass == len(runs):
+                status, emoji = "ok  ", "✅"
+            elif n_pass == 0:
+                status, emoji = "FAIL", "❌"
+            else:
+                status, emoji = "FLKY", "⚠️"
+            med_s = statistics.median(r["seconds"] for r in runs)
+            med_rt = statistics.median(r["round_trips"] for r in runs)
+            case_iv = sum(r["interventions"] for r in runs)
+            case_rates.append(n_pass / len(runs))
+            latencies.extend(r["seconds"] for r in runs)
+            round_trips.extend(r["round_trips"] for r in runs)
+            interventions.append(case_iv)
+            print(
+                f"  [{status}] {case['id']:32} {n_pass}/{len(runs)} "
+                f"{med_s:5.1f}s  rt={med_rt:.0f} iv={case_iv}  {runs[-1]['detail']}"
+            )
+            section["rows"].append({
+                "status": emoji, "id": case["id"], "n_pass": n_pass,
+                "runs": len(runs), "med_s": med_s, "med_rt": med_rt,
+                "iv": case_iv,
+            })
+            fail_detail = next((r["detail"] for r in runs if not r["passed"]), None)
+            if fail_detail:
+                section["failures"].append({
+                    "id": case["id"], "n_pass": n_pass, "runs": len(runs),
+                    "detail": fail_detail,
+                })
+        summary.append((
+            model,
+            statistics.mean(case_rates),
+            statistics.median(latencies),
+            statistics.mean(round_trips),
+            sum(interventions),
+        ))
 
+    summary_sorted = sorted(summary, key=lambda r: -r[1])
     print("\n=== summary ===")
-    print(f"{'model':25} {'score':>8} {'p50 latency':>12}")
-    for model, score, p50 in sorted(summary, key=lambda r: -r[1]):
-        print(f"{model:25} {score:>7.0%} {p50:>10.1f}s")
+    print(f"{'model':25} {'score':>8} {'p50 latency':>12} {'avg rt':>8} {'interventions':>14}")
+    for model, score, p50, avg_rt, iv in summary_sorted:
+        print(f"{model:25} {score:>7.0%} {p50:>10.1f}s {avg_rt:>8.1f} {iv:>14}")
+
+    meta = {
+        "timestamp": started.strftime("%Y-%m-%d %H:%M"),
+        "config": Path(args.config).name,
+        "n_cases": len(cases),
+        "runs": args.runs,
+    }
+    out_path = (
+        Path(args.out) if args.out
+        else ROOT / "logs" / f"eval_{started.strftime('%Y-%m-%d_%H-%M')}.md"
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(build_report(meta, summary_sorted, model_sections), encoding="utf-8")
+    print(f"\nreport: {out_path}")
 
 
 if __name__ == "__main__":

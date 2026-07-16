@@ -17,6 +17,7 @@ class LLMClient:
         # environment; Ollama ignores the key, so any placeholder works there.
         api_key = os.environ.get("OPENAI_API_KEY") or "ollama"
         self._client = OpenAI(base_url=config.base_url, api_key=api_key)
+        self.last_usage: dict | None = None  # token usage of the latest call
 
     def chat(self, messages: list[dict], tools: list[dict]):
         """One completion turn. Returns the assistant message object
@@ -27,6 +28,12 @@ class LLMClient:
             tools=tools,
             temperature=self.config.temperature,
         )
+        self.last_usage = None
+        if response.usage:
+            self.last_usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+            }
         message = response.choices[0].message
         if message.content:
             message.content = _THINK_RE.sub("", message.content).strip()

@@ -43,6 +43,9 @@ class AgentLoop:
         self.log = log or ActionLog(None)
         self.estop_active = False
         self.history: list[dict] = [{"role": "system", "content": system_prompt}]
+        # Populated per command: llm_calls (round-trips), prompt/completion
+        # tokens, malformed_calls. Read by the eval harness and the JSONL log.
+        self.last_command_stats: dict = {}
 
     def reset_conversation(self, system_prompt: str | None = None) -> None:
         system = system_prompt or self.history[0]["content"]
@@ -56,6 +59,7 @@ class AgentLoop:
             self.log.write(
                 type="command_complete",
                 seconds=round(time.perf_counter() - start, 2),
+                **self.last_command_stats,
             )
 
     def _trim_history(self) -> None:
@@ -77,9 +81,20 @@ class AgentLoop:
         self.log.write(type="user_command", text=user_text)
         session = SafetySession(estop_active=self.estop_active)
         malformed_count = 0
+        stats = self.last_command_stats = {
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "malformed_calls": 0,
+        }
 
         for _ in range(self.config.llm.max_iterations):
             message = self.llm.chat(self.history, self.tools)
+            stats["llm_calls"] += 1
+            usage = getattr(self.llm, "last_usage", None)
+            if usage:
+                stats["prompt_tokens"] += usage.get("prompt_tokens", 0)
+                stats["completion_tokens"] += usage.get("completion_tokens", 0)
             tool_calls = list(message.tool_calls or [])
             assistant: dict = {"role": "assistant", "content": message.content or ""}
             if tool_calls:
@@ -117,6 +132,7 @@ class AgentLoop:
                         raise ValueError("arguments must be a JSON object")
                 except (json.JSONDecodeError, ValueError):
                     malformed_count += 1
+                    stats["malformed_calls"] = malformed_count
                     self.on_event("info", {"text": f"Malformed arguments for {name}."})
                     self._tool_result(
                         tc,
