@@ -44,6 +44,11 @@ class MockRobotController:
     def set_visible_objects(self, objects: list[dict]) -> None:
         self.visible_objects = objects
 
+    def reset(self) -> None:
+        self.state = RobotState()
+        self.visible_objects = deepcopy(DEFAULT_VISIBLE_OBJECTS)
+        self._injected_failures.clear()
+
     # -- skills --------------------------------------------------------------
 
     def stand_up(self) -> SkillResult:
@@ -108,6 +113,15 @@ class MockRobotController:
         if match:
             data.update(position=match["position"], confidence=match["confidence"])
         return self._finish("find_object", {"label": label}, data=data)
+
+    def detect_objects(self) -> SkillResult:
+        err = self._precheck("detect_objects", None, COST_SCAN)
+        if err:
+            return self._finish("detect_objects", {}, error=err)
+        self._drain(COST_SCAN)
+        return self._finish(
+            "detect_objects", {}, data={"objects": deepcopy(self.visible_objects)}
+        )
 
     def follow_person(self) -> SkillResult:
         err = self._precheck("follow_person", Posture.STANDING, COST_FOLLOW)

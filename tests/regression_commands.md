@@ -1,8 +1,8 @@
 # Live regression command set
 
-Run these manually in the CLI (`python -m aliengo.cli`) against the real
-model after any model or prompt change. This set seeds the Phase 10 eval
-dataset.
+These cases are automated in `eval_commands.json` — run them with
+`uv run python scripts/evaluate.py`. This table remains the human-readable
+reference for manual CLI walks.
 
 | # | Command | Expected behavior |
 |---|---------|-------------------|

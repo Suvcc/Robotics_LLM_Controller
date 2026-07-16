@@ -139,6 +139,15 @@ ALL_SKILLS: tuple[Skill, ...] = (
         params_model=FindObjectParams,
     ),
     Skill(
+        name="detect_objects",
+        description=(
+            "Scan with the camera and list every object currently visible, "
+            "with position (left, center, right) and confidence. Use this when "
+            "asked what you can see or before searching for something."
+        ),
+        params_model=NoParams,
+    ),
+    Skill(
         name="follow_person",
         description=(
             "Start following the nearest visible person, walking to keep them in "
