@@ -129,6 +129,27 @@ def test_follow_person_and_stop(standing):
     assert state.following is False and state.moving is False
 
 
+def test_follow_object(standing):
+    result = standing.follow_object("bottle")
+    assert result.success
+    assert result.data["target"]["label"] == "bottle"
+    assert standing.get_state().following is True
+
+
+def test_follow_object_not_visible(standing):
+    result = standing.follow_object("elephant")
+    assert not result.success
+    assert "elephant" in result.error
+    assert standing.get_state().following is False
+
+
+def test_emergency_stop_clears_following(standing):
+    standing.follow_object("bottle")
+    standing.emergency_stop()
+    state = standing.get_state()
+    assert state.following is False and state.moving is False
+
+
 def test_follow_person_needs_visible_person(standing):
     standing.set_visible_objects([])
     result = standing.follow_person()

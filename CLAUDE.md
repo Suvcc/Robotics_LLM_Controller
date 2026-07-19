@@ -37,10 +37,31 @@ text or /voice → LLM (agent/llm.py) → tool calls → safety.validate() → R
 - `aliengo/agent/loop.py` — tool-calling loop: sequential execution, batch-skip after
   block/failure, malformed retries, iteration cap, history cap, per-command stats.
 - `aliengo/speech/stt.py` — mic → faster-whisper → text; feeds the same pipeline.
+- `aliengo/robot/jetracer.py` — real JetRacer backend (threaded `follow_object`
+  visual-servo loop); `aliengo/vision/detector.py` — detectNet camera detector.
+  Both lazy-import Jetson-only libs, so they import fine on the PC.
 - `aliengo/cli.py` — rich REPL: `/voice /state /log /estop /reset`.
 - `prompts/system_prompt.md` — behavior rules incl. anti-stale-plan rules.
 - `tests/` — offline suite uses a scripted FakeLLM; `eval_commands.json` is the
   live benchmark dataset (13 cases).
+
+## Hardware backends
+
+`config.robot.backend`: `mock` (default, no hardware) or `jetracer` (real car,
+on the Jetson). The CLI picks the controller; everything above the
+`RobotController` seam is identical. The LLM is **not** in the vision loop —
+`follow_object(label)` starts a background thread (camera → detectNet →
+steering/throttle) that runs until `stop`; `/estop` calls `emergency_stop()` to
+kill it. JetRacer is a car: no posture (stand/sit are no-ops), no in-place turn
+(steer-while-driving), no encoders (distance = throttle×time).
+
+**PLACEHOLDERs to calibrate before driving** (all marked in-file): in
+`robot/jetracer.py` — `THROTTLE_LIMIT`, `DRIVE_THROTTLE`, `SPEED_MPS`,
+`TURN_STEERING`, `TURN_SECONDS_PER_90DEG`, `STEERING_OFFSET`, `STEER_KP`,
+`STOP_HEIGHT_FRAC`, `LOST_FRAMES`, `MAX_RUNTIME_S`, and `_read_battery()`; in
+`vision/detector.py` — camera id/resolution/fps and detectNet model/threshold.
+Jetson libs (`jetracer`, `jetson-inference`, `jetcam`) install on the Jetson
+only — never add them to pyproject (breaks `uv sync` on the PC).
 
 ## Conventions
 
@@ -61,7 +82,7 @@ text or /voice → LLM (agent/llm.py) → tool calls → safety.validate() → R
 | 1–5 core (LLM, skills, mock, safety, loop/CLI) | ✅ done, tested |
 | 6 speech-to-text | ⚠️ works, but see issues below |
 | 7 mock vision (`find_object`, `detect_objects`) | ✅ done |
-| 8 real YOLO vision | ⬜ not started |
+| 8 real vision + JetRacer | 🚧 `JetRacerController` + threaded `follow_object` + detectNet detector scaffolded (mock-testable); PLACEHOLDERs to calibrate on hardware |
 | 9 multi-step planner | ⬜ deferred until eval shows multi-step failures |
 | 10 evaluation | ✅ harness done (13 cases, --runs, MD reports); dataset to grow |
 | 11 ROS/AlienGo bridge | ⬜ design agreed: HTTP skill-server on robot's Ubuntu PC, `RemoteRobotController` client |

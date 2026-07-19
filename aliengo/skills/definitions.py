@@ -49,6 +49,15 @@ class FindObjectParams(BaseModel):
     )
 
 
+class FollowObjectParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(
+        min_length=1,
+        description="Name of the object to follow, e.g. 'bottle' or 'person'.",
+    )
+
+
 @dataclass(frozen=True)
 class Skill:
     name: str
@@ -154,6 +163,17 @@ ALL_SKILLS: tuple[Skill, ...] = (
             "view. The robot must be standing. Continues until stop is called."
         ),
         params_model=NoParams,
+        required_posture=Posture.STANDING,
+        risk=RiskLevel.REQUIRES_CONFIRMATION,
+    ),
+    Skill(
+        name="follow_object",
+        description=(
+            "Start continuously following a named object with the camera, keeping "
+            "it centered in view. The robot must be standing. Continues until stop "
+            "is called."
+        ),
+        params_model=FollowObjectParams,
         required_posture=Posture.STANDING,
         risk=RiskLevel.REQUIRES_CONFIRMATION,
     ),

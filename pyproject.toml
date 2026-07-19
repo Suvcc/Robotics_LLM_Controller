@@ -19,6 +19,11 @@ dependencies = [
     "scipy>=1.17.1",
 ]
 
+# NOTE: the JetRacer backend (aliengo/robot/jetracer.py) needs `jetracer`,
+# `jetson-inference`, and `jetcam`. These are Jetson-only (ARM + CUDA) and are
+# NOT installable on the Windows/PC dev box — do not add them here or `uv sync`
+# will break. Install them on the Jetson via its own system/JetPack packages.
+
 # uv installs the dev group by default on sync/run, so pytest and the
 # notebook kernel stop getting uninstalled by plain `uv sync`.
 [dependency-groups]

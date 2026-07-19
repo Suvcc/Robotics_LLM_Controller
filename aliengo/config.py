@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -32,11 +33,17 @@ class SpeechConfig(BaseModel):
     language: str | None = None  # e.g. "en"; None = Whisper auto-detect
 
 
+class RobotConfig(BaseModel):
+    # "mock" = stateful fake (default, no hardware); "jetracer" = real car.
+    backend: Literal["mock", "jetracer"] = "mock"
+
+
 class AppConfig(BaseModel):
     llm: LLMConfig = LLMConfig()
     safety: SafetyConfig = SafetyConfig()
     logging: LoggingConfig = LoggingConfig()
     speech: SpeechConfig = SpeechConfig()
+    robot: RobotConfig = RobotConfig()
 
 
 def load_config(path: str | Path = "config.yaml") -> AppConfig:

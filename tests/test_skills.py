@@ -12,7 +12,7 @@ from aliengo.skills.registry import get_skill, to_openai_tools
 EXPECTED_SKILLS = {
     "stand_up", "sit_down", "move_forward", "move_backward",
     "turn_left", "turn_right", "stop", "find_object", "detect_objects",
-    "follow_person",
+    "follow_person", "follow_object",
 }
 
 

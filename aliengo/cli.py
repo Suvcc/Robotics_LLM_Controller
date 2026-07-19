@@ -92,6 +92,17 @@ def _confirm(skill: str, params: dict, reason: str) -> bool:
     return Confirm.ask(f"[yellow]{reason}[/] Run [bold]{skill}[/]?", default=False)
 
 
+def _build_controller(config, log):
+    """Pick the robot backend. 'jetracer' is imported lazily so the Jetson-only
+    libraries are never needed for the default mock runs."""
+    if config.robot.backend == "jetracer":
+        from .robot.jetracer import JetRacerController
+
+        console.print("[bold yellow]Using JetRacer hardware backend.[/]")
+        return JetRacerController()
+    return MockRobotController(log=log)
+
+
 def main() -> None:
     # Pick up OPENAI_API_KEY from a project .env file; a value already set in
     # the shell wins over the file.
@@ -105,7 +116,7 @@ def main() -> None:
     args = parser.parse_args()
     config = load_config(args.config)
     log = ActionLog(config.logging.actions_path)
-    controller = MockRobotController(log=log)
+    controller = _build_controller(config, log)
     system_prompt = _load_system_prompt()
     loop = AgentLoop(
         llm=LLMClient(config.llm),
@@ -158,6 +169,8 @@ def main() -> None:
             elif cmd == "/estop":
                 loop.estop_active = not loop.estop_active
                 state = "ACTIVE" if loop.estop_active else "released"
+                if loop.estop_active:
+                    controller.emergency_stop()  # physically halt a running follow loop
                 console.print(f"[bold red]emergency stop {state}[/]")
             elif cmd == "/reset":
                 controller.reset()

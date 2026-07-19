@@ -137,6 +137,27 @@ class MockRobotController:
         self._drain(COST_FOLLOW)
         return self._finish("follow_person", {}, data={"target": person})
 
+    def follow_object(self, label: str) -> SkillResult:
+        err = self._precheck("follow_object", Posture.STANDING, COST_FOLLOW)
+        if err:
+            return self._finish("follow_object", {"label": label}, error=err)
+        target = next(
+            (o for o in self.visible_objects if o["label"].lower() == label.lower()),
+            None,
+        )
+        if target is None:
+            return self._finish(
+                "follow_object", {"label": label}, error=f"No {label} is visible."
+            )
+        self.state.moving = True
+        self.state.following = True
+        self._drain(COST_FOLLOW)
+        return self._finish("follow_object", {"label": label}, data={"target": target})
+
+    def emergency_stop(self) -> None:
+        self.state.moving = False
+        self.state.following = False
+
     def get_state(self) -> RobotState:
         return self.state
 
