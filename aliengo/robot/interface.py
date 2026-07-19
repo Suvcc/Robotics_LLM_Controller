@@ -51,6 +51,10 @@ class RobotController(Protocol):
     # Physically halt everything immediately (e.g. kill a running follow loop).
     # Distinct from stop() so /estop can force it regardless of skill gating.
     def emergency_stop(self) -> None: ...
+    # Clear the controller's hardware-level e-stop latch without starting motion.
+    def release_emergency_stop(self) -> None: ...
+    # Stop and release hardware resources during a graceful process shutdown.
+    def close(self) -> None: ...
 
 
 def execute_skill(

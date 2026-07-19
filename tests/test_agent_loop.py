@@ -253,3 +253,23 @@ def test_estop_blocks_but_stop_runs():
     assert payloads[0]["blocked"] is True  # stand_up blocked under e-stop
     assert payloads[1]["success"] is True  # stop still ran
     assert controller.get_state().posture is Posture.SITTING
+
+
+def test_confirmation_is_revalidated_if_estop_activates_during_approval():
+    loop, controller = make_loop([
+        tool_msg(("stand_up", {})),
+        tool_msg(("follow_person", {})),
+        text_msg("The emergency stop blocked following."),
+    ])
+
+    def approve_after_estop(skill, params, reason):
+        loop.estop_active = True
+        controller.emergency_stop()
+        return True
+
+    loop.confirm = approve_after_estop
+    loop.run_command("follow that person")
+    payloads = last_tool_payloads(loop)
+    assert payloads[-1]["blocked"] is True
+    assert "Emergency stop" in payloads[-1]["error"]
+    assert controller.get_state().following is False

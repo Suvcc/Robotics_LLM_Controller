@@ -22,3 +22,9 @@ speech:
 
 logging:
   actions_path: logs/actions.jsonl
+
+server:
+  host: 0.0.0.0
+  port: 8443
+  tls_certfile: .certs/aliengo.pem
+  tls_keyfile: .certs/aliengo-key.pem

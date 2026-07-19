@@ -38,12 +38,27 @@ class RobotConfig(BaseModel):
     backend: Literal["mock", "jetracer"] = "mock"
 
 
+class ServerConfig(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = Field(default=8443, ge=1, le=65535)
+    tls_certfile: str = ".certs/aliengo.pem"
+    tls_keyfile: str = ".certs/aliengo-key.pem"
+    lease_timeout_s: float = Field(default=300.0, gt=0)
+    confirmation_timeout_s: float = Field(default=30.0, gt=0)
+    session_idle_timeout_s: float = Field(default=86400.0, gt=0)
+    max_command_chars: int = Field(default=1000, ge=1)
+    max_audio_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
+    max_audio_duration_s: float = Field(default=15.0, gt=0)
+    auth_attempts_per_minute: int = Field(default=5, ge=1)
+
+
 class AppConfig(BaseModel):
     llm: LLMConfig = LLMConfig()
     safety: SafetyConfig = SafetyConfig()
     logging: LoggingConfig = LoggingConfig()
     speech: SpeechConfig = SpeechConfig()
     robot: RobotConfig = RobotConfig()
+    server: ServerConfig = ServerConfig()
 
 
 def load_config(path: str | Path = "config.yaml") -> AppConfig:

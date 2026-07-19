@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#07100e">
+    <title>AlienGo Network Control</title>
+    <link rel="stylesheet" href="/static/app.css?v=20260719">
+    <script src="/static/app.js?v=20260719" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <main class="shell" id="app" hidden>
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="AlienGo Network Control home">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <span><strong>AlienGo</strong><small>Network control</small></span>
+        </a>
+        <div class="top-actions">
+          <span class="connection-pill" id="connection-pill"><i></i> Connecting</span>
+          <button class="button ghost compact" id="logout-button" type="button">Sign out</button>
+        </div>
+      </header>
+
+      <section class="safety-bar" id="safety-bar">
+        <div>
+          <span class="eyebrow">Safety channel</span>
+          <strong id="safety-title">Emergency stop ready</strong>
+          <p id="safety-copy">Available to every authenticated device.</p>
+        </div>
+        <div class="safety-actions">
+          <button class="button release" id="release-estop-button" type="button" hidden>Release e-stop</button>
+          <button class="estop-button" id="estop-button" type="button">
+            <span aria-hidden="true"></span> E-STOP
+          </button>
+        </div>
+      </section>
+
+      <div class="dashboard-grid">
+        <section class="panel state-panel" aria-labelledby="state-title">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Live telemetry</span>
+              <h1 id="state-title">Robot state</h1>
+            </div>
+            <span class="backend-chip" id="backend-chip">mock</span>
+          </div>
+          <div class="telemetry-grid">
+            <article><span>Posture</span><strong id="posture-value">—</strong></article>
+            <article><span>Battery</span><strong id="battery-value">—</strong></article>
+            <article><span>Motion</span><strong id="motion-value">—</strong></article>
+            <article><span>Heading</span><strong id="heading-value">—</strong></article>
+          </div>
+          <div class="pose-line">
+            <span>Position estimate</span>
+            <strong id="position-value">x 0.0 · y 0.0</strong>
+          </div>
+        </section>
+
+        <section class="panel lease-panel" aria-labelledby="lease-title">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Operator lock</span>
+              <h2 id="lease-title">Control lease</h2>
+            </div>
+            <span class="lease-time" id="lease-time">Available</span>
+          </div>
+          <div class="operator-row">
+            <span class="operator-avatar" id="operator-avatar">—</span>
+            <div><strong id="lease-owner">No active operator</strong><p id="lease-copy">Claim control to send commands.</p></div>
+          </div>
+          <div class="button-row">
+            <button class="button primary" id="claim-button" type="button">Claim control</button>
+            <button class="button ghost" id="release-button" type="button" hidden>Release control</button>
+            <button class="button ghost" id="reset-button" type="button" hidden>Reset robot</button>
+          </div>
+        </section>
+
+        <section class="panel command-panel" aria-labelledby="command-title">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Natural-language command</span>
+              <h2 id="command-title">Tell AlienGo what to do</h2>
+            </div>
+            <span class="busy-chip" id="busy-chip" hidden>Working</span>
+          </div>
+          <label class="sr-only" for="command-input">Robot command</label>
+          <textarea id="command-input" rows="4" maxlength="1000" placeholder="Try “stand up and move forward one meter”" disabled></textarea>
+          <div class="composer-footer">
+            <div class="voice-wrap">
+              <button class="button voice" id="voice-button" type="button" disabled>
+                <span aria-hidden="true">●</span> Record command
+              </button>
+              <span id="voice-status">Up to 15 seconds · transcribed locally</span>
+            </div>
+            <button class="button send" id="send-button" type="button" disabled>Send command <span aria-hidden="true">→</span></button>
+          </div>
+        </section>
+
+        <section class="panel activity-panel" aria-labelledby="activity-title">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Command trace</span>
+              <h2 id="activity-title">Activity</h2>
+            </div>
+            <button class="text-button" id="clear-activity" type="button">Clear</button>
+          </div>
+          <ol class="timeline" id="timeline" aria-live="polite">
+            <li class="empty-state" id="empty-activity"><strong>Waiting for a command</strong><span>Tool calls and safety decisions will appear here.</span></li>
+          </ol>
+        </section>
+      </div>
+    </main>
+
+    <section class="login-screen" id="login-screen">
+      <div class="login-card">
+        <span class="login-mark" aria-hidden="true">A</span>
+        <span class="eyebrow">Private network access</span>
+        <h1>Connect to AlienGo</h1>
+        <p>Enter your operator name and the shared host passcode.</p>
+        <form id="login-form">
+          <label for="display-name">Operator name</label>
+          <input id="display-name" name="display_name" maxlength="32" autocomplete="name" required placeholder="Your name">
+          <label for="passcode">Shared passcode</label>
+          <input id="passcode" name="passcode" type="password" autocomplete="current-password" required placeholder="At least 12 characters">
+          <button class="button primary full" type="submit">Connect securely</button>
+        </form>
+        <small>Commands remain on this private network and always pass through the robot safety layer.</small>
+      </div>
+    </section>
+
+    <dialog class="confirmation-dialog" id="confirmation-dialog">
+      <form method="dialog">
+        <span class="warning-mark" aria-hidden="true">!</span>
+        <span class="eyebrow">Operator confirmation</span>
+        <h2 id="confirmation-title">Approve action?</h2>
+        <p id="confirmation-reason"></p>
+        <pre id="confirmation-params"></pre>
+        <div class="confirmation-timer"><span id="confirmation-bar"></span></div>
+        <div class="button-row end">
+          <button class="button ghost" id="decline-button" value="cancel" type="button">Decline</button>
+          <button class="button warning" id="approve-button" value="default" type="button">Approve action</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

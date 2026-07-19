@@ -17,6 +17,10 @@ dependencies = [
     "sounddevice>=0.5.5",
     "numpy>=2.4.6",
     "scipy>=1.17.1",
+    "av>=14.0",
+    "fastapi>=0.115",
+    "python-multipart>=0.0.20",
+    "uvicorn[standard]>=0.34",
 ]
 
 # NOTE: the JetRacer backend (aliengo/robot/jetracer.py) needs `jetracer`,
@@ -30,13 +34,18 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "ipykernel>=6.29",
+    "httpx>=0.28",
 ]
 
 [project.scripts]
 aliengo = "aliengo.cli:main"
+aliengo-server = "aliengo.server:main"
 
 [tool.setuptools.packages.find]
 include = ["aliengo*"]
+
+[tool.setuptools.package-data]
+"aliengo.web" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

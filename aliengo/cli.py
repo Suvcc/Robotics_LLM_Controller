@@ -13,7 +13,8 @@ from .actionlog import ActionLog
 from .agent.llm import LLMClient
 from .agent.loop import AgentLoop
 from .config import load_config
-from .robot.mock import MockRobotController
+from .robot.interface import RobotController
+from .runtime import build_controller
 from .skills.registry import to_openai_tools
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -46,7 +47,7 @@ def _load_system_prompt() -> str:
     return FALLBACK_SYSTEM_PROMPT
 
 
-def _print_state(controller: MockRobotController, estop: bool) -> None:
+def _print_state(controller: RobotController, estop: bool) -> None:
     s = controller.get_state().to_dict()
     estop_str = " [bold red]E-STOP[/]" if estop else ""
     console.print(
@@ -96,11 +97,8 @@ def _build_controller(config, log):
     """Pick the robot backend. 'jetracer' is imported lazily so the Jetson-only
     libraries are never needed for the default mock runs."""
     if config.robot.backend == "jetracer":
-        from .robot.jetracer import JetRacerController
-
         console.print("[bold yellow]Using JetRacer hardware backend.[/]")
-        return JetRacerController()
-    return MockRobotController(log=log)
+    return build_controller(config, log)
 
 
 def main() -> None:
@@ -167,13 +165,17 @@ def main() -> None:
             elif cmd == "/log":
                 _print_log(config, int(arg) if arg.isdigit() else 5)
             elif cmd == "/estop":
-                loop.estop_active = not loop.estop_active
+                activating = not loop.estop_active
+                loop.estop_active = activating
                 state = "ACTIVE" if loop.estop_active else "released"
-                if loop.estop_active:
+                if activating:
                     controller.emergency_stop()  # physically halt a running follow loop
+                else:
+                    controller.release_emergency_stop()
                 console.print(f"[bold red]emergency stop {state}[/]")
             elif cmd == "/reset":
                 controller.reset()
+                controller.release_emergency_stop()
                 loop.reset_conversation()
                 loop.estop_active = False
                 console.print("[dim]robot and conversation reset[/]")

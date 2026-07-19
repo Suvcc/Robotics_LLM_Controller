@@ -12,6 +12,7 @@ from typing import Callable
 from ..actionlog import ActionLog
 from ..config import AppConfig
 from ..robot.interface import RobotController, RobotState, execute_skill
+from ..safety.estop import EmergencyStopState
 from ..safety.validator import Decision, SafetySession, validate
 
 MAX_MALFORMED_RETRIES = 2
@@ -48,6 +49,7 @@ class AgentLoop:
         confirm: ConfirmFn | None = None,
         on_event: EventFn | None = None,
         log: ActionLog | None = None,
+        estop_state: EmergencyStopState | None = None,
     ):
         self.llm = llm
         self.controller = controller
@@ -56,20 +58,42 @@ class AgentLoop:
         self.confirm = confirm
         self.on_event = on_event or (lambda kind, payload: None)
         self.log = log or ActionLog(None)
-        self.estop_active = False
+        self.estop_state = estop_state or EmergencyStopState()
         self.history: list[dict] = [{"role": "system", "content": system_prompt}]
         # Populated per command: llm_calls (round-trips), prompt/completion
         # tokens, malformed_calls. Read by the eval harness and the JSONL log.
         self.last_command_stats: dict = {}
 
+    @property
+    def estop_active(self) -> bool:
+        """Compatibility property for the CLI and existing test harnesses."""
+        return self.estop_state.active
+
+    @estop_active.setter
+    def estop_active(self, active: bool) -> None:
+        if active:
+            self.estop_state.activate()
+        else:
+            self.estop_state.release()
+
     def reset_conversation(self, system_prompt: str | None = None) -> None:
         system = system_prompt or self.history[0]["content"]
         self.history = [{"role": "system", "content": system}]
 
-    def run_command(self, user_text: str) -> str:
+    def run_command(
+        self,
+        user_text: str,
+        *,
+        confirm: ConfirmFn | None = None,
+        on_event: EventFn | None = None,
+    ) -> str:
         start = time.perf_counter()
         try:
-            return self._run_command(user_text)
+            return self._run_command(
+                user_text,
+                confirm_fn=confirm if confirm is not None else self.confirm,
+                event_fn=on_event or self.on_event,
+            )
         finally:
             self.log.write(
                 type="command_complete",
@@ -90,7 +114,13 @@ class AgentLoop:
         cut = user_indices[len(user_indices) - max_commands]
         self.history = [self.history[0]] + self.history[cut:]
 
-    def _run_command(self, user_text: str) -> str:
+    def _run_command(
+        self,
+        user_text: str,
+        *,
+        confirm_fn: ConfirmFn | None,
+        event_fn: EventFn,
+    ) -> str:
         if self.config.llm.inject_state:
             prefix = format_state_prefix(self.controller.get_state())
             content = f"{prefix}\n{user_text}"
@@ -153,14 +183,14 @@ class AgentLoop:
                 except (json.JSONDecodeError, ValueError):
                     malformed_count += 1
                     stats["malformed_calls"] = malformed_count
-                    self.on_event("info", {"text": f"Malformed arguments for {name}."})
+                    event_fn("info", {"text": f"Malformed arguments for {name}."})
                     self._tool_result(
                         tc,
                         {"success": False, "error": "Arguments were not a valid JSON object. Retry with correct JSON."},
                     )
                     continue
 
-                self.on_event("tool_call", {"skill": name, "args": raw_args})
+                event_fn("tool_call", {"skill": name, "args": raw_args})
                 session.estop_active = self.estop_active
                 decision = validate(
                     name, raw_args, self.controller.get_state(), session, self.config.safety
@@ -169,7 +199,7 @@ class AgentLoop:
                     type="safety", skill=name, args=raw_args,
                     decision=decision.decision.value, reason=decision.reason,
                 )
-                self.on_event(
+                event_fn(
                     "safety",
                     {"skill": name, "decision": decision.decision.value, "reason": decision.reason},
                 )
@@ -180,17 +210,45 @@ class AgentLoop:
                     continue
 
                 if decision.decision is Decision.CONFIRM:
-                    approved = bool(self.confirm and self.confirm(name, decision.params, decision.reason))
+                    approved = bool(
+                        confirm_fn
+                        and confirm_fn(name, decision.params, decision.reason)
+                    )
                     if not approved:
                         self._tool_result(tc, {"success": False, "error": "User declined confirmation."})
                         skip_reason = f"the user declined '{name}'"
                         continue
 
+                    # Confirmation can take time over the network.  Re-run the
+                    # complete gate against fresh robot/e-stop state before
+                    # executing; CONFIRM here means all non-confirmation checks
+                    # still pass and the already-granted approval remains valid.
+                    session.estop_active = self.estop_active
+                    recheck = validate(
+                        name,
+                        raw_args,
+                        self.controller.get_state(),
+                        session,
+                        self.config.safety,
+                    )
+                    if recheck.decision is Decision.BLOCK:
+                        self._tool_result(
+                            tc,
+                            {
+                                "success": False,
+                                "blocked": True,
+                                "error": recheck.reason,
+                            },
+                        )
+                        skip_reason = f"'{name}' was blocked after confirmation"
+                        continue
+                    decision = recheck
+
                 result = execute_skill(self.controller, name, decision.params)
                 session.tool_calls_made += 1
                 if result.success:
                     session.distance_moved_m += decision.params.get("distance", 0.0)
-                self.on_event("result", result.to_dict())
+                event_fn("result", result.to_dict())
                 self._tool_result(tc, result.to_dict())
                 if not result.success:
                     skip_reason = f"'{name}' failed"

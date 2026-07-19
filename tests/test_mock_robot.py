@@ -150,6 +150,22 @@ def test_emergency_stop_clears_following(standing):
     assert state.following is False and state.moving is False
 
 
+def test_emergency_stop_latches_until_explicit_release(standing):
+    standing.emergency_stop()
+    blocked = standing.move_forward(distance=1.0)
+    assert not blocked.success
+    assert "emergency stop" in blocked.error.lower()
+    assert standing.stop().success  # recovery remains available
+    standing.release_emergency_stop()
+    assert standing.move_forward(distance=1.0).success
+
+
+def test_get_state_returns_a_snapshot(robot):
+    snapshot = robot.get_state()
+    snapshot.battery_pct = 0
+    assert robot.get_state().battery_pct == 100.0
+
+
 def test_follow_person_needs_visible_person(standing):
     standing.set_visible_objects([])
     result = standing.follow_person()

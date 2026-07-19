@@ -19,3 +19,16 @@ speech:
   model_size: base   # try "small" if transcriptions are poor
   duration_s: 5
   language: en       # remove to let Whisper auto-detect
+
+server:
+  host: 0.0.0.0
+  port: 8443
+  tls_certfile: .certs/aliengo.pem
+  tls_keyfile: .certs/aliengo-key.pem
+  lease_timeout_s: 300
+  confirmation_timeout_s: 30
+  session_idle_timeout_s: 86400
+  max_command_chars: 1000
+  max_audio_bytes: 10485760
+  max_audio_duration_s: 15
+  auth_attempts_per_minute: 5
